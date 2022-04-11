@@ -1,0 +1,23 @@
+
+[req]
+distinguished_name = req_distinguished_name
+req_extensions = v3_req
+prompt = no
+[req_distinguished_name]
+C = US
+ST = WA
+L = Redmond
+O = Contoso
+OU = security
+CN = localhost
+[v3_req]
+basicConstraints=CA:FALSE
+subjectKeyIdentifier=hash
+authorityKeyIdentifier=keyid,issuer
+keyUsage = nonRepudiation,digitalSignature,keyEncipherment
+extendedKeyUsage = critical,serverAuth,clientAuth
+subjectAltName = @alt_names
+[alt_names]
+DNS.1 = localhost
+DNS.2 = www.contoso.com
+DNS.3 = contoso.com
