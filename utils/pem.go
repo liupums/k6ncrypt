@@ -1,6 +1,3 @@
-// Copyright 2020 Google LLC.
-// Use of this source code is governed by a BSD-style
-// license that can be found in the LICENSE file.package tpm
 // https://github.com/salrashid123/signer/blob/master/example/sign_verify_pem/main.go
 package utils
 
@@ -22,22 +19,14 @@ const ()
 var (
 	x509Certificate    x509.Certificate
 	publicKey          crypto.PublicKey
-	clientCAs          *x509.CertPool
-	clientAuth         *tls.ClientAuthType
-	signatureAlgorithm x509.SignatureAlgorithm
 )
 
 type PEM struct {
-	crypto.Signer
-
-	ExtTLSConfig *tls.Config
+	crypto.Signer // implement crypto.Signer
 
 	PublicCertFile string
 	PrivatePEMFile string
-
 	privateKey *rsa.PrivateKey
-
-	SignatureAlgorithm x509.SignatureAlgorithm
 	refreshMutex       sync.Mutex
 }
 
@@ -45,14 +34,6 @@ type PEM struct {
 // the following Decrypt and Sign functions uses ordinary private keys
 
 func NewPEMCrypto(conf *PEM) (PEM, error) {
-
-	if conf.SignatureAlgorithm == x509.UnknownSignatureAlgorithm {
-		conf.SignatureAlgorithm = x509.SHA256WithRSA
-	}
-	if (conf.SignatureAlgorithm != x509.SHA256WithRSA) && (conf.SignatureAlgorithm != x509.SHA256WithRSAPSS) {
-		return PEM{}, fmt.Errorf("signatureALgorithm must be either x509.SHA256WithRSA or x509.SHA256WithRSAPSS")
-	}
-
 	if conf.PrivatePEMFile == "" {
 		return PEM{}, fmt.Errorf("privateKey cannot be empoty")
 	}
@@ -61,33 +42,18 @@ func NewPEMCrypto(conf *PEM) (PEM, error) {
 	if err != nil {
 		return PEM{}, fmt.Errorf("Unable to read keys %v", err)
 	}
+
 	block, _ := pem.Decode(privatePEM)
 	if block == nil {
 		return PEM{}, fmt.Errorf("failed to parse PEM block containing the key")
 	}
 
-	if key, err := x509.ParsePKCS1PrivateKey(block.Bytes); err == nil {
-		conf.privateKey = key
-	}
-	
-	if conf.privateKey == nil {
-		return PEM{}, err
+	key, err := x509.ParsePKCS1PrivateKey(block.Bytes)
+	if err != nil {
+		return PEM{}, fmt.Errorf("Private Key must be RSA PKCS1 format: %v", err)
 	}
 
-	// priv, err := x509.ParsePKCS1PrivateKey(block.Bytes)
-	// if err != nil {
-	// 	return PEM{}, err
-	// }
-
-	if conf.ExtTLSConfig != nil {
-		if len(conf.ExtTLSConfig.Certificates) > 0 {
-			return PEM{}, fmt.Errorf("certificates value in ExtTLSConfig Ignored")
-		}
-
-		if len(conf.ExtTLSConfig.CipherSuites) > 0 {
-			return PEM{}, fmt.Errorf("cipherSuites value in ExtTLSConfig Ignored")
-		}
-	}
+	conf.privateKey = key
 	return *conf, nil
 }
 
@@ -95,6 +61,7 @@ func (t PEM) Public() crypto.PublicKey {
 	return t.privateKey.Public().(crypto.PublicKey)
 }
 
+// Core function to implement crypto.Signer
 func (t PEM) Sign(_ io.Reader, digest []byte, opts crypto.SignerOpts) ([]byte, error) {
 	fmt.Printf("Sign is called\n")
 
@@ -124,26 +91,6 @@ func (t PEM) Sign(_ io.Reader, digest []byte, opts crypto.SignerOpts) ([]byte, e
 		}
 	}
 
-
-	// return SignPKCS1v15(rand, priv, opts.HashFunc(), digest)
-
-	// if t.SignatureAlgorithm == x509.SHA256WithRSAPSS {
-	// 	var ropts rsa.PSSOptions
-	// 	ropts.SaltLength = rsa.PSSSaltLengthEqualsHash
-
-	// 	signature, err = rsa.SignPSS(rand.Reader, t.privateKey, opts.HashFunc(), digest, &ropts)
-	// 	if err != nil {
-	// 		return nil, fmt.Errorf("failed to sign RSA-PSS %v", err)
-	// 	}
-	// } else {
-	// 	signature, err = rsa.SignPKCS1v15(rand.Reader, t.privateKey, opts.HashFunc(), digest)
-	// 	if err != nil {
-	// 		return nil, fmt.Errorf("failed to sign RSA-SignPKCS1v15 %v", err)
-	// 	}
-	// 	if err != nil {
-	// 		return nil, fmt.Errorf("failed to sign RSA-PSS %v", err)
-	// 	}
-	// }
 	return signature, nil
 }
 
@@ -176,20 +123,5 @@ func (t PEM) TLSCertificate() tls.Certificate {
 		PrivateKey:  privKey,
 		Leaf:        &x509Certificate,
 		Certificate: [][]byte{x509Certificate.Raw},
-	}
-}
-
-func (t PEM) TLSConfig() *tls.Config {
-
-	return &tls.Config{
-		Certificates: []tls.Certificate{t.TLSCertificate()},
-		RootCAs:      t.ExtTLSConfig.RootCAs,
-		ClientCAs:    t.ExtTLSConfig.ClientCAs,
-		ClientAuth:   t.ExtTLSConfig.ClientAuth,
-		ServerName:   t.ExtTLSConfig.ServerName,
-
-		CipherSuites: t.ExtTLSConfig.CipherSuites,
-		MaxVersion:   t.ExtTLSConfig.MaxVersion,
-		MinVersion:   t.ExtTLSConfig.MinVersion,
 	}
 }
