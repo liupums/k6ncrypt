@@ -1,6 +1,6 @@
 # k6ncrypt
 ## Prepare cert and private key
-C:\k6ncrypt>createcerts.cmd
+C:\k6ncrypt>createcert.cmd
 
 ## Start Server
 ```
