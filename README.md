@@ -107,7 +107,7 @@ D:\k6ncrypt\certstore>go run main.go
 open cert store
 get cert from cert store
 get key from cert
-find cert CN=localhost,OU=security,O=Contoso,L=Redmond,ST=WA,C=US with private key
+find cert 'CN=localhost,OU=security,O=Contoso,L=Redmond,ST=WA,C=US' with private key in container 'C:\ProgramData\Microsoft\Crypto\Keys\cad91794ddf50456b13c563fdc9fe9aa_64e6b472-74a5-4eb6-a106-b43815e2d97d', algo 'RSA'
 ```
 
 ### NOTE

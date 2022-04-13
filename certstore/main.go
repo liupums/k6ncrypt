@@ -52,6 +52,6 @@ func main() {
 		return
 	}
 
-	fmt.Printf("find cert %s with private key\n", crt.Subject)
+	fmt.Printf("find cert '%s' with private key in container '%s', algo '%s'\n", crt.Subject, key.Container, key.AlgorithmGroup)
 
 }
