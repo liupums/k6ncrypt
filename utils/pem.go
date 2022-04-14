@@ -12,6 +12,7 @@ import (
 	"io"
 	"io/ioutil"
 	"sync"
+	"encoding/hex"
 )
 
 const ()
@@ -78,19 +79,21 @@ func (t PEM) Sign(_ io.Reader, digest []byte, opts crypto.SignerOpts) ([]byte, e
 	// RSA-PSS: https://github.com/golang/go/issues/32425
 	
 	if pssOpts, ok := opts.(*rsa.PSSOptions); ok {
-		// return SignPSS(rand, priv, pssOpts.Hash, digest, pssOpts)
-	
+		fmt.Printf("SignPSS is called\n")
 		signature, err = rsa.SignPSS(rand.Reader, t.privateKey, opts.HashFunc(), digest, pssOpts)
 		if err != nil {
 			return nil, fmt.Errorf("failed to sign RSA-PSS %v", err)
 		}
 	} else {
+		fmt.Printf("SignPKCS1v15 is called\n")
 		signature, err = rsa.SignPKCS1v15(rand.Reader, t.privateKey, opts.HashFunc(), digest)
 		if err != nil {
 			return nil, fmt.Errorf("failed to sign RSA-SignPKCS1v15 %v", err)
 		}
 	}
 
+	fmt.Printf("digest %s\n", hex.EncodeToString(digest))		
+	fmt.Printf("sig %s\n", hex.EncodeToString(signature))		
 	return signature, nil
 }
 

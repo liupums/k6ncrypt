@@ -3,20 +3,14 @@ package main
 
 import (
 	"fmt"
-	"strings"
 	"github.com/google/certtostore"
 )
 
-var (
-	issuers []string
-)
-
 func main() {
-	issuers = strings.Split("localhost", ",")
 	fmt.Println("open cert store")
 
 	// Open the local cert store. Provider generally shouldn't matter, so use Software which is ubiquitous. See comments in getHostKey.
-	store, err := certtostore.OpenWinCertStore(certtostore.ProviderMSSoftware, "", issuers, nil, false)
+	store, err := certtostore.OpenWinCertStore(certtostore.ProviderMSSoftware, "", []string{"localhost"}, nil, false)
 	
 	if err != nil {
 		fmt.Errorf("OpenWinCertStore: %v", err)

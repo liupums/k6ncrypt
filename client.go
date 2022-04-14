@@ -11,15 +11,27 @@ import (
 )
 
 func main() {
-	pemKey, err := utils.NewPEMCrypto(&utils.PEM{
+
+	// pemKey, err := utils.NewPEMCrypto(&utils.PEM{
+	// 	PrivatePEMFile: "rsakey.pem",
+	// 	PublicCertFile: "cert.pem",
+	// })
+	// if err != nil {
+	// 	fmt.Println(err)
+	// 	return
+	// }
+	// cert := pemKey.TLSCertificate()
+
+	csKey, err := utils.NewWINCS(&utils.WINCS{
+		Issuer: "localhost",
 		PrivatePEMFile: "rsakey.pem",
-		PublicCertFile: "cert.pem",
 	})
+	
 	if err != nil {
 		fmt.Println(err)
 		return
 	}
-	cert := pemKey.TLSCertificate()
+	cert := csKey.TLSCertificate()
 
 	// Read the key pair to create certificate
 	// cert, err := tls.LoadX509KeyPair("cert.pem", "key.pem")
