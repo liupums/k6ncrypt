@@ -1,6 +1,6 @@
 # k6ncrypt
 ## Prepare cert and private key
-### Run as admin
+### Run as admin, and the private key is installed into VSM as non-exportable
 D:\k6ncrypt>createcert.cmd
 ```
 D:\k6ncrypt>openssl req -config openssl.cnf -newkey rsa:2048 -new -nodes -x509 -days 3650 -out cert.pem -keyout key.pem -extensions v3_req
@@ -148,9 +148,11 @@ sig a84d2a628bf24c44e7cd552d006e3478688d73884a2d9327615c0a93dec2094042cf6b44a018
 Hello, world!
 ```
 ### check the key is non-exportable
+NOTE: use the key container id showing above 55340bce64ed0049e84ce494a19e1479_0348503b-0232-43a2-a77a-dc83cf95a8c1
+```
 D:\k6ncrypt>CERTUTIL -v -csp KSP -key 55340bce64ed0049e84ce494a19e1479_0348503b-0232-43a2-a77a-dc83cf95a8c1 | findstr Private
 Private key is a VSM key
 Private key is NOT exportable
-
+```
 
 
