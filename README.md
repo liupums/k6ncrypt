@@ -135,10 +135,22 @@ cert[0], CN='localhost'
 ## Start client
 ```
 D:\k6ncrypt>go run client.go
+get cert from cert store
+get key from cert
+find cert 'CN=localhost,OU=security,O=Contoso,L=Redmond,ST=WA,C=US' with private key in container 'C:\ProgramData\Microsoft\Crypto\Keys\55340bce64ed0049e84ce494a19e1479_0348503b-0232-43a2-a77a-dc83cf95a8c1', algo 'RSA'
 VerifyConnection server localhost
 cert[0], CN='localhost'
 Sign is called
+SignPSS is called
+--result by winstore private key
+sig a84d2a628bf24c44e7cd552d006e3478688d73884a2d9327615c0a93dec2094042cf6b44a01877b3610541afb879583a085df11de503d95f5190a8b0a8a0d30fb5314842138a2d10e977e49b5a3e5544f4bbbd864ec627fede35bff8ac018a03f641e4dbe4dc70314a78b9896b26ef8820e1c544d3c420ab25f04dfd03e12463c68de75acc1f96bf7384df4071bd29eafcafb63e732858ffbc46d9f3c023e43799c4d74a49a9f38542aa629f8d4118df4ac5f8796b4f2711469cb20fe2805f4d0e405dacc05b6fbaffd4b4345fe41f7982e827f0630374a4e541761e0d9c17eeb6a767c8be0e9df944edcef09ca5078a55cefc2e28592d8010fef328f93c61c8
+-----
 Hello, world!
 ```
+### check the key is non-exportable
+D:\k6ncrypt>CERTUTIL -v -csp KSP -key 55340bce64ed0049e84ce494a19e1479_0348503b-0232-43a2-a77a-dc83cf95a8c1 | findstr Private
+Private key is a VSM key
+Private key is NOT exportable
+
 
 

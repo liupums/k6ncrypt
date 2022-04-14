@@ -4,23 +4,22 @@ package utils
 import (
 	"fmt"
 	"crypto"	
-	"crypto/rand"
 	"crypto/rsa"
 	"crypto/tls"
 	"crypto/x509"
-	"io"
-	"io/ioutil"
 	"sync"
-	"encoding/pem"	
+	"io"
 	"encoding/hex"	
 	"github.com/google/certtostore"
 	"golang.org/x/sys/windows"
 	"unsafe"
 	"unicode/utf16"
 )
+
+// https://github.com/tpn/winsdk-10/blob/master/Include/10.0.14393.0/shared/bcrypt.h
 const (
-	// Legacy CryptoAPI flags
-	bCryptPadPKCS1 uintptr = 0x2
+	BCRYPT_SUPPORTED_PAD_PKCS1_ENC uintptr = 0x2
+	BCRYPT_PAD_PSS uintptr = 0x8
 )
 
 // wide returns a pointer to a a uint16 representing the equivalent
@@ -59,7 +58,9 @@ var (
 	nCryptOpenStorageProvider         = nCrypt.MustFindProc("NCryptOpenStorageProvider")
 	nCryptGetProperty                 = nCrypt.MustFindProc("NCryptGetProperty")
 	nCryptSetProperty                 = nCrypt.MustFindProc("NCryptSetProperty")
-	nCryptSignHash                    = nCrypt.MustFindProc("NCryptSignHash")	
+	nCryptSignHash                    = nCrypt.MustFindProc("NCryptSignHash")
+
+	x509Crt   *x509.Certificate
 )
 
 // paddingInfo is the BCRYPT_PKCS1_PADDING_INFO struct in bcrypt.h.
@@ -67,16 +68,18 @@ type paddingInfo struct {
 	pszAlgID *uint16
 }
 
+// paddingInfo is the  BCRYPT_PSS_PADDING_INFO struct in bcrypt.h.
+type BCRYPT_PSS_PADDING_INFO struct {
+	pszAlgID *uint16
+	cbSalt int
+}
+
 type WINCS struct {
 	crypto.Signer // implement crypto.Signer
-
-	PrivatePEMFile string
-	privateKey *rsa.PrivateKey
-
 	refreshMutex       sync.Mutex
 
 	Issuer string
-	ncryptkey uintptr
+	ncryptkey certtostore.Key
 }
 
 // Just to test crypto.Singer, crypto.Decrypt interfaces
@@ -87,36 +90,12 @@ func NewWINCS(conf *WINCS) (WINCS, error) {
 		return WINCS{}, fmt.Errorf("certstore cannot be empty")
 	}
 
-	if conf.PrivatePEMFile == "" {
-		return *conf, nil
-	}
-
-	privatePEM, err := ioutil.ReadFile(conf.PrivatePEMFile)
-	if err != nil {
-		return WINCS{}, fmt.Errorf("Unable to read keys %v", err)
-	}
-
-	block, _ := pem.Decode(privatePEM)
-	if block == nil {
-		return WINCS{}, fmt.Errorf("failed to parse PEM block containing the key")
-	}
-
-	key, err := x509.ParsePKCS1PrivateKey(block.Bytes)
-	if err != nil {
-		return WINCS{}, fmt.Errorf("Private Key must be RSA PKCS1 format: %v", err)
-	}
-
-	conf.privateKey = key
-	return *conf, nil
-}
-
-func (t WINCS) TLSCertificate() tls.Certificate {
 	// Open the local cert store. Provider generally shouldn't matter, so use Software which is ubiquitous. See comments in getHostKey.
-	store, err := certtostore.OpenWinCertStore(certtostore.ProviderMSSoftware, "", []string{t.Issuer}, nil, false)
+	store, err := certtostore.OpenWinCertStore(certtostore.ProviderMSSoftware, "", []string{conf.Issuer}, nil, false)
 	
 	if err != nil {
 		fmt.Errorf("OpenWinCertStore: %v", err)
-		return tls.Certificate{}
+		return WINCS{}, err
 	}	
 	
 	fmt.Println("get cert from cert store")
@@ -126,12 +105,12 @@ func (t WINCS) TLSCertificate() tls.Certificate {
 	crt, context, err := store.CertWithContext()
 	if err != nil {
 		fmt.Println("failed to get cert from cert store. ", err)
-		return tls.Certificate{}
+		return WINCS{}, err
 	}
 	
 	if crt == nil {
 		fmt.Println("no cert")
-		return tls.Certificate{}
+		return WINCS{}, fmt.Errorf("no cert found in certstore")
 	}
 
 	fmt.Println("get key from cert")
@@ -140,30 +119,35 @@ func (t WINCS) TLSCertificate() tls.Certificate {
 	key, err := store.CertKey(context)
 	if err != nil {
 		fmt.Printf("private key not found in %s, %s", store.ProvName, err)
-		return tls.Certificate{}
+		return WINCS{}, err
 	}
 
 	if key == nil {
 		fmt.Println("no key")
-		return tls.Certificate{}
+		return WINCS{}, fmt.Errorf("no key associated with cert")
 	}
 
-	t.ncryptkey = key.TransientTpmHandle()
-
 	fmt.Printf("find cert '%s' with private key in container '%s', algo '%s'\n", crt.Subject, key.Container, key.AlgorithmGroup)
+	x509Crt = crt
+    conf.ncryptkey = *key
+	return *conf, nil
+}
+
+func (t WINCS) TLSCertificate() tls.Certificate {
+
 	var privKey crypto.PrivateKey = t
 	return tls.Certificate{
 		PrivateKey:  privKey,
-		Leaf:        crt,
-		Certificate: [][]byte{crt.Raw},
+		Leaf:        x509Crt,
+		Certificate: [][]byte{x509Crt.Raw},
 	}
 }
 
 func (t WINCS) Public() crypto.PublicKey {
-	return t.privateKey.Public().(crypto.PublicKey)
+	return t.ncryptkey.Public().(crypto.PublicKey)
 }
 
-func signRSA(kh uintptr, digest []byte, algID *uint16) ([]byte, error) {
+func SignPKCS1v15(kh uintptr, digest []byte, algID *uint16) ([]byte, error) {
 	padInfo := paddingInfo{pszAlgID: algID}
 	var size uint32
 	// Obtain the size of the signature
@@ -175,7 +159,7 @@ func signRSA(kh uintptr, digest []byte, algID *uint16) ([]byte, error) {
 		0,
 		0,
 		uintptr(unsafe.Pointer(&size)),
-		bCryptPadPKCS1)
+		BCRYPT_SUPPORTED_PAD_PKCS1_ENC)
 	if r != 0 {
 		return nil, fmt.Errorf("NCryptSignHash returned %X during size check: %v", r, err)
 	}
@@ -190,7 +174,51 @@ func signRSA(kh uintptr, digest []byte, algID *uint16) ([]byte, error) {
 		uintptr(unsafe.Pointer(&sig[0])),
 		uintptr(size),
 		uintptr(unsafe.Pointer(&size)),
-		bCryptPadPKCS1)
+		BCRYPT_SUPPORTED_PAD_PKCS1_ENC)
+	if r != 0 {
+		return nil, fmt.Errorf("NCryptSignHash returned %X during signing: %v", r, err)
+	}
+
+	return sig[:size], nil
+}
+
+func SignPSS(kh uintptr, digest []byte, hash crypto.Hash, pssOpts *rsa.PSSOptions) ([]byte, error) {
+    // https://cs.opensource.google/go/go/+/refs/tags/go1.18.1:src/crypto/rsa/pss.go;bpv=1;bpt=1
+	if pssOpts.SaltLength != -1 {
+		return nil, fmt.Errorf("Only support PSSSaltLengthEqualsHash for now")
+	}
+
+	padInfo := BCRYPT_PSS_PADDING_INFO{
+		pszAlgID: algIDs[hash], 
+		cbSalt: hash.Size(), // PSSSaltLengthEqualsHash
+	}
+
+	var size uint32
+	// Obtain the size of the signature
+	r, _, err := nCryptSignHash.Call(
+		kh,
+		uintptr(unsafe.Pointer(&padInfo)),
+		uintptr(unsafe.Pointer(&digest[0])),
+		uintptr(len(digest)),
+		0,
+		0,
+		uintptr(unsafe.Pointer(&size)),
+		BCRYPT_PAD_PSS)
+	if r != 0 {
+		return nil, fmt.Errorf("NCryptSignHash returned %X during size check: %v", r, err)
+	}
+
+	// Obtain the signature data
+	sig := make([]byte, size)
+	r, _, err = nCryptSignHash.Call(
+		kh,
+		uintptr(unsafe.Pointer(&padInfo)),
+		uintptr(unsafe.Pointer(&digest[0])),
+		uintptr(len(digest)),
+		uintptr(unsafe.Pointer(&sig[0])),
+		uintptr(size),
+		uintptr(unsafe.Pointer(&size)),
+		BCRYPT_PAD_PSS)
 	if r != 0 {
 		return nil, fmt.Errorf("NCryptSignHash returned %X during signing: %v", r, err)
 	}
@@ -210,39 +238,31 @@ func (t WINCS) Sign(_ io.Reader, digest []byte, opts crypto.SignerOpts) ([]byte,
 		return nil, fmt.Errorf("sal: Sign: Digest length doesn't match passed crypto algorithm")
 	}
 
-	var signature []byte
-	var err error
-	// RSA-PSS: https://github.com/golang/go/issues/32425
-	
-	if pssOpts, ok := opts.(*rsa.PSSOptions); ok {
-		fmt.Printf("SignPSS is called\n")
-		signature, err = rsa.SignPSS(rand.Reader, t.privateKey, opts.HashFunc(), digest, pssOpts)
-		if err != nil {
-			return nil, fmt.Errorf("failed to sign RSA-PSS %v", err)
-		}
-	} else {
-		fmt.Printf("SignPKCS1v15 is called\n")
-		signature, err = rsa.SignPKCS1v15(rand.Reader, t.privateKey, opts.HashFunc(), digest)
-		if err != nil {
-			return nil, fmt.Errorf("failed to sign RSA-SignPKCS1v15 %v", err)
-		}
-	}
-
-	fmt.Printf("--result by pem private key\n")		
-	fmt.Printf("digest %s\n", hex.EncodeToString(digest))		
-	fmt.Printf("sig %s\n", hex.EncodeToString(signature))		
-	fmt.Printf("-----\n")		
-
 	hf := opts.HashFunc()
 	algID, ok := algIDs[hf]
 	if !ok {
 		return nil, fmt.Errorf("unsupported RSA hash algorithm %v", hf)
 	}
 
-	sig, err := signRSA(t.ncryptkey, digest, algID)
+	var sig []byte
+	var err error
+	if pssOpts, ok := opts.(*rsa.PSSOptions); ok {
+		fmt.Printf("SignPSS is called\n")
+		sig, err = SignPSS(t.ncryptkey.TransientTpmHandle(), digest, hf, pssOpts)
+		if err != nil {
+			fmt.Printf("failed to sign RSA-SignPSS %v", err)
+		}
+	} else {
+		fmt.Printf("SignPKCS1v15 is called\n")
+		sig, err = SignPKCS1v15(t.ncryptkey.TransientTpmHandle(), digest, algID)
+		if err != nil {
+			fmt.Printf("failed to sign RSA-SignPKCS1v15 %v", err)
+		}
+	}
+
 	fmt.Printf("--result by winstore private key\n")		
 	fmt.Printf("sig %s\n", hex.EncodeToString(sig))		
 	fmt.Printf("-----\n")		
 
-	return signature, nil
+	return sig, nil
 }

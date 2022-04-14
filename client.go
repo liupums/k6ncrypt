@@ -24,7 +24,6 @@ func main() {
 
 	csKey, err := utils.NewWINCS(&utils.WINCS{
 		Issuer: "localhost",
-		PrivatePEMFile: "rsakey.pem",
 	})
 	
 	if err != nil {
