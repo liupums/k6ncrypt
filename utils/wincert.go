@@ -213,7 +213,7 @@ func NewWinCert(conf *WinCert) (WinCert, error) {
 
 	conf.storeHandle = &store
 	conf.x509cert = cert
-	conf.winCertContext = &certCxt
+	conf.winCertContext = certCxt
 	conf.privateKey = priv
 	return *conf, nil
 }
@@ -330,7 +330,7 @@ func SignPSS(kh uintptr, digest []byte, hash crypto.Hash, pssOpts *rsa.PSSOption
 
 // Core function to implement crypto.Signer
 func (t *WinCert) Sign(_ io.Reader, digest []byte, opts crypto.SignerOpts) ([]byte, error) {
-	fmt.Printf("Sign is called\n")
+	fmt.Printf("WinCert::Sign is called\n")
 
 	t.refreshMutex.Lock()
 	defer t.refreshMutex.Unlock()
@@ -349,20 +349,20 @@ func (t *WinCert) Sign(_ io.Reader, digest []byte, opts crypto.SignerOpts) ([]by
 	var sig []byte
 	var err error
 	if pssOpts, ok := opts.(*rsa.PSSOptions); ok {
-		fmt.Printf("SignPSS is called\n")
+		fmt.Printf("WinCert::SignPSS is called\n")
 		sig, err = SignPSS(*t.privateKey, digest, hf, pssOpts)
 		if err != nil {
 			fmt.Printf("failed to sign RSA-SignPSS %v", err)
 		}
 	} else {
-		fmt.Printf("SignPKCS1v15 is called\n")
+		fmt.Printf("WinCert::SignPKCS1v15 is called\n")
 		sig, err = SignPKCS1v15(*t.privateKey, digest, algID)
 		if err != nil {
 			fmt.Printf("failed to sign RSA-SignPKCS1v15 %v", err)
 		}
 	}
 
-	fmt.Printf("--result by winstore private key\n")
+	fmt.Printf("--result by WinCert private key\n")
 	fmt.Printf("sig %s\n", hex.EncodeToString(sig))
 	fmt.Printf("-----\n")
 

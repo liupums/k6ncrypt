@@ -7,6 +7,7 @@ import (
 	"io/ioutil"
 	"log"
 	"net/http"
+
 	"contoso.org/utils" //https://github.com/drov0/GolangLocalModulesExample
 )
 
@@ -22,10 +23,14 @@ func main() {
 	// }
 	// cert := pemKey.TLSCertificate()
 
-	csKey, err := utils.NewWINCS(&utils.WINCS{
+	// csKey, err := utils.NewWINCS(&utils.WINCS{
+	// 	Issuer: "localhost",
+	// })
+
+	csKey, err := utils.NewWinCert(&utils.WinCert{
 		Issuer: "localhost",
 	})
-	
+
 	if err != nil {
 		fmt.Println(err)
 		return
@@ -50,8 +55,8 @@ func main() {
 	client := &http.Client{
 		Transport: &http.Transport{
 			TLSClientConfig: &tls.Config{
-				RootCAs: caCertPool,
-				Certificates: []tls.Certificate{ cert },
+				RootCAs:      caCertPool,
+				Certificates: []tls.Certificate{cert},
 				// Set InsecureSkipVerify to skip the default validation we are
 				// replacing. This will not disable VerifyConnection.
 				InsecureSkipVerify: true,
@@ -66,7 +71,7 @@ func main() {
 						fmt.Printf("cert[%d], CN='%s'\n", i, cn)
 					}
 
-					opts.Roots = caCertPool;
+					opts.Roots = caCertPool
 					_, err := cs.PeerCertificates[0].Verify(opts)
 					return err
 				},
