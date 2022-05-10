@@ -3,7 +3,6 @@ package main
 import (
 	"crypto/tls"
 	"crypto/x509"
-	"fmt"
 	"io/ioutil"
 	"log"
 	"net/http"
@@ -28,11 +27,11 @@ func main() {
 	// })
 
 	csKey, err := utils.NewWinCert(&utils.WinCert{
-		Issuer: "localhost",
+		PublicCertFile: "cert.pem",
 	})
 
 	if err != nil {
-		fmt.Println(err)
+		log.Println(err)
 		return
 	}
 	cert := csKey.TLSCertificate()
@@ -48,6 +47,7 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
+
 	caCertPool := x509.NewCertPool()
 	caCertPool.AppendCertsFromPEM(caCert)
 
@@ -61,14 +61,14 @@ func main() {
 				// replacing. This will not disable VerifyConnection.
 				InsecureSkipVerify: true,
 				VerifyConnection: func(cs tls.ConnectionState) error {
-					fmt.Printf("VerifyConnection server %s\n", cs.ServerName)
+					log.Printf("VerifyConnection server %s\n", cs.ServerName)
 					opts := x509.VerifyOptions{
 						DNSName:       cs.ServerName,
 						Intermediates: x509.NewCertPool(),
 					}
 					for i, cert := range cs.PeerCertificates[0:] {
 						cn := cert.Subject.CommonName
-						fmt.Printf("cert[%d], CN='%s'\n", i, cn)
+						log.Printf("server cert[%d], CN='%s'\n", i, cn)
 					}
 
 					opts.Roots = caCertPool
@@ -93,5 +93,5 @@ func main() {
 	}
 
 	// Print the response body to stdout
-	fmt.Printf("%s\n", body)
+	log.Printf("%s\n", body)
 }
