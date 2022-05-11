@@ -49,11 +49,11 @@ const (
 	cryptENotFound = 0x80092004 // CRYPT_E_NOT_FOUND
 
 	// https://github.com/tpn/winsdk-10/blob/master/Include/10.0.14393.0/shared/bcrypt.h
-	BCRYPT_SUPPORTED_PAD_PKCS1_ENC uintptr = 0x2
-	BCRYPT_PAD_PSS                 uintptr = 0x8
+	bCryptSupportedPadPkcs1End uintptr = 0x2
+	bCryptPadPss               uintptr = 0x8
 
 	// https://cs.opensource.google/go/go/+/refs/tags/go1.18.1:src/crypto/rsa/pss.go;bpv=1;bpt=1
-	PSSSaltLengthEqualsHash = -1
+	pssSaltLengthEqualsHash = -1
 )
 
 // wide returns a pointer to a a uint16 representing the equivalent
@@ -89,32 +89,39 @@ var (
 )
 
 type WinCert struct {
-	PublicCertFile string
-	storeHandle    *windows.Handle
-	x509cert       *x509.Certificate
-	winCertContext *windows.CertContext
-	privateKey     *uintptr
-	refreshMutex   sync.Mutex
+	PublicCertFile string               // input: the public cert PEM file name
+	storeHandle    *windows.Handle      // cert store handler
+	x509cert       *x509.Certificate    // x509 certificate
+	winCertContext *windows.CertContext // windows cert context
+	privateKey     *uintptr             // private key handler
+	refreshMutex   sync.Mutex           // mutex
 }
 
+// Create a new win cert object
+// The requirements:
+// 1. the public cert PEM file on the file system
+// 2. the cert is imported to windows localmachine\My cert store
+// 3. the cert has a CNG private key which can be used for signing
+// 4. windows admin previledge is required to access localmachine\My cert store
+// NOTE: currently, only RSA CNG private key is supported
 func NewWinCert(conf *WinCert) (WinCert, error) {
 	if conf.PublicCertFile == "" {
-		return WinCert{}, fmt.Errorf("public cert file name cannot be empty")
+		return WinCert{}, fmt.Errorf("Public cert file name cannot be empty")
 	}
 
 	pubPEM, err := ioutil.ReadFile(conf.PublicCertFile)
 	if err != nil {
-		return WinCert{}, fmt.Errorf("unable to read cert file: %v", err)
+		return WinCert{}, fmt.Errorf("Unable to read cert file: %v", err)
 	}
 
 	block, _ := pem.Decode([]byte(pubPEM))
 	if block == nil {
-		return WinCert{}, fmt.Errorf("failed to parse PEM block containing the public cert")
+		return WinCert{}, fmt.Errorf("Failed to parse PEM block containing the public cert")
 	}
 
 	pub, err := x509.ParseCertificate(block.Bytes)
 	if err != nil {
-		return WinCert{}, fmt.Errorf("failed to parse certificat : %v", err)
+		return WinCert{}, fmt.Errorf("Failed to parse certificat : %v", err)
 	}
 
 	// See https://docs.microsoft.com/en-us/windows/win32/api/wincrypt/nf-wincrypt-certopenstore
@@ -127,19 +134,19 @@ func NewWinCert(conf *WinCert) (WinCert, error) {
 		uintptr(unsafe.Pointer(my)))
 
 	if err != nil {
-		return WinCert{}, fmt.Errorf("CertOpenStore() failed for localmachine\\my store, returned: %v", err)
+		return WinCert{}, fmt.Errorf("CertOpenStore() failed for localmachine\\my store: %v", err)
 	}
 
 	certCxt, err := findCertViaThumbprint(store, pub)
 	if err != nil {
 		windows.CertCloseStore(store, 1)
-		return WinCert{}, fmt.Errorf("Failed to find certificate specified by %s: %v", conf.PublicCertFile, err)
+		return WinCert{}, fmt.Errorf("Failed to find the cert in localmachine\\My specified by %s: %v", conf.PublicCertFile, err)
 	}
 
-	priv, err := CertContextPrivateKey(certCxt)
+	priv, err := certContextPrivateKey(certCxt)
 	if err != nil {
 		windows.CertCloseStore(store, 1)
-		return WinCert{}, fmt.Errorf("Failed to convert cert context to x509 certificate : %v", err)
+		return WinCert{}, fmt.Errorf("Failed to find associated private key for cert context: %v", err)
 	}
 
 	conf.storeHandle = &store
@@ -190,17 +197,17 @@ func (t *WinCert) Sign(_ io.Reader, digest []byte, opts crypto.SignerOpts) ([]by
 	var sig []byte
 	var err error
 	if pssOpts, ok := opts.(*rsa.PSSOptions); ok {
-		log.Println("WinCert::SignPSS is called")
-		sig, err = SignPSS(*t.privateKey, digest, hf, pssOpts)
+		log.Println("WinCert::signPSS is called")
+		sig, err = signPSS(*t.privateKey, digest, hf, pssOpts)
 		if err != nil {
-			log.Printf("failed to sign RSA-SignPSS %v\n", err)
+			log.Printf("failed to sign RSA-signPSS %v\n", err)
 			return nil, err
 		}
 	} else {
-		log.Println("WinCert::SignPKCS1v15 is called")
-		sig, err = SignPKCS1v15(*t.privateKey, digest, algID)
+		log.Println("WinCert::signPKCS1v15 is called")
+		sig, err = signPKCS1v15(*t.privateKey, digest, algID)
 		if err != nil {
-			log.Printf("failed to sign RSA-SignPKCS1v15 %v\n", err)
+			log.Printf("failed to sign RSA-signPKCS1v15 %v\n", err)
 			return nil, err
 		}
 	}
@@ -211,13 +218,13 @@ func (t *WinCert) Sign(_ io.Reader, digest []byte, opts crypto.SignerOpts) ([]by
 	return sig, nil
 }
 
-// BCRYPT_PKCS1_PADDING_INFO struct in bcrypt.h.
-type BCRYPT_PKCS1_PADDING_INFO struct {
+// bCryptPkcs1PaddingInfo struct in bcrypt.h.
+type bCryptPkcs1PaddingInfo struct {
 	pszAlgID *uint16
 }
 
-func SignPKCS1v15(kh uintptr, digest []byte, algID *uint16) ([]byte, error) {
-	padInfo := BCRYPT_PKCS1_PADDING_INFO{pszAlgID: algID}
+func signPKCS1v15(kh uintptr, digest []byte, algID *uint16) ([]byte, error) {
+	padInfo := bCryptPkcs1PaddingInfo{pszAlgID: algID}
 	var size uint32
 	// Obtain the size of the signature
 	r, _, err := nCryptSignHash.Call(
@@ -228,7 +235,7 @@ func SignPKCS1v15(kh uintptr, digest []byte, algID *uint16) ([]byte, error) {
 		0,
 		0,
 		uintptr(unsafe.Pointer(&size)),
-		BCRYPT_SUPPORTED_PAD_PKCS1_ENC)
+		bCryptSupportedPadPkcs1End)
 	if r != 0 {
 		return nil, fmt.Errorf("NCryptSignHash returned %X during size check: %v", r, err)
 	}
@@ -243,7 +250,7 @@ func SignPKCS1v15(kh uintptr, digest []byte, algID *uint16) ([]byte, error) {
 		uintptr(unsafe.Pointer(&sig[0])),
 		uintptr(size),
 		uintptr(unsafe.Pointer(&size)),
-		BCRYPT_SUPPORTED_PAD_PKCS1_ENC)
+		bCryptSupportedPadPkcs1End)
 	if r != 0 {
 		return nil, fmt.Errorf("NCryptSignHash returned %X during signing: %v", r, err)
 	}
@@ -251,20 +258,20 @@ func SignPKCS1v15(kh uintptr, digest []byte, algID *uint16) ([]byte, error) {
 	return sig[:size], nil
 }
 
-// BCRYPT_PSS_PADDING_INFO struct in bcrypt.h.
-type BCRYPT_PSS_PADDING_INFO struct {
+// bCryptPssPaddingInfo struct in bcrypt.h.
+type bCryptPssPaddingInfo struct {
 	pszAlgID *uint16
 	cbSalt   int
 }
 
-func SignPSS(kh uintptr, digest []byte, hash crypto.Hash, pssOpts *rsa.PSSOptions) ([]byte, error) {
-	if pssOpts.SaltLength != PSSSaltLengthEqualsHash {
-		return nil, fmt.Errorf("WinCert::SignPSS: Only support PSSSaltLengthEqualsHash for now")
+func signPSS(kh uintptr, digest []byte, hash crypto.Hash, pssOpts *rsa.PSSOptions) ([]byte, error) {
+	if pssOpts.SaltLength != pssSaltLengthEqualsHash {
+		return nil, fmt.Errorf("WinCert::signPSS: Only support pssSaltLengthEqualsHash for now")
 	}
 
-	padInfo := BCRYPT_PSS_PADDING_INFO{
+	padInfo := bCryptPssPaddingInfo{
 		pszAlgID: algIDs[hash],
-		cbSalt:   hash.Size(), // PSSSaltLengthEqualsHash
+		cbSalt:   hash.Size(), // pssSaltLengthEqualsHash
 	}
 
 	var size uint32
@@ -277,7 +284,7 @@ func SignPSS(kh uintptr, digest []byte, hash crypto.Hash, pssOpts *rsa.PSSOption
 		0,
 		0,
 		uintptr(unsafe.Pointer(&size)),
-		BCRYPT_PAD_PSS)
+		bCryptPadPss)
 	if r != 0 {
 		return nil, fmt.Errorf("NCryptSignHash returned %X during size check: %v", r, err)
 	}
@@ -292,7 +299,7 @@ func SignPSS(kh uintptr, digest []byte, hash crypto.Hash, pssOpts *rsa.PSSOption
 		uintptr(unsafe.Pointer(&sig[0])),
 		uintptr(size),
 		uintptr(unsafe.Pointer(&size)),
-		BCRYPT_PAD_PSS)
+		bCryptPadPss)
 	if r != 0 {
 		return nil, fmt.Errorf("NCryptSignHash returned %X during signing: %v", r, err)
 	}
@@ -301,7 +308,7 @@ func SignPSS(kh uintptr, digest []byte, hash crypto.Hash, pssOpts *rsa.PSSOption
 }
 
 //  _CRYPTOAPI_BLOB struct in wincrypt.h.
-type CRYPT_HASH_BLOB struct {
+type cryptHashBlob struct {
 	cbData int
 	pbData *byte
 }
@@ -309,8 +316,8 @@ type CRYPT_HASH_BLOB struct {
 // findCertViaThumbprint wraps the CertFindCertificateInStore call. If no certificate was found, nil will be returned.
 func findCertViaThumbprint(store windows.Handle, x509cert *x509.Certificate) (*windows.CertContext, error) {
 	fingerprint := sha1.Sum(x509cert.Raw)
-	log.Printf("findCertViaThumbprint by thumbprint '%s'\n", hex.EncodeToString(fingerprint[:]))
-	thumbprint := CRYPT_HASH_BLOB{len(fingerprint), &fingerprint[0]}
+	log.Printf("Trying to find cert in the cert store with thumbprint '%s'\n", hex.EncodeToString(fingerprint[:]))
+	thumbprint := cryptHashBlob{len(fingerprint), &fingerprint[0]}
 
 	h, _, err := certFindCertificateInStore.Call(
 		uintptr(store),
@@ -324,20 +331,22 @@ func findCertViaThumbprint(store windows.Handle, x509cert *x509.Certificate) (*w
 	if h == 0 {
 		// Actual error, or simply not found?
 		if errno, ok := err.(syscall.Errno); ok && errno == cryptENotFound {
+			log.Printf("Could not find cert with thumbprint '%s'\n", hex.EncodeToString(fingerprint[:]))
 			return nil, nil
 		}
 		return nil, err
 	}
 
+	log.Printf("Found cert with thumbprint '%s'\n", hex.EncodeToString(fingerprint[:]))
 	return (*windows.CertContext)(unsafe.Pointer(h)), nil
 }
 
-// CertContextPrivateKey wraps CryptAcquireCertificatePrivateKey. It obtains the CNG private
+// certContextPrivateKey wraps CryptAcquireCertificatePrivateKey. It obtains the CNG private
 // key of a known certificate. When a nil cert context is passed
 // a nil key is intentionally returned, to model the expected behavior of a
 // non-existent cert having no private key.
 // https://docs.microsoft.com/en-us/windows/win32/api/wincrypt/nf-wincrypt-cryptacquirecertificateprivatekey
-func CertContextPrivateKey(cert *windows.CertContext) (*uintptr, error) {
+func certContextPrivateKey(cert *windows.CertContext) (*uintptr, error) {
 	// Return early if a nil cert was passed.
 	if cert == nil {
 		return nil, nil
