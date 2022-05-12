@@ -116,7 +116,7 @@ func NewWinCert(conf *WinCert) (WinCert, error) {
 
 	block, _ := pem.Decode([]byte(pubPEM))
 	if block == nil {
-		return WinCert{}, fmt.Errorf("Failed to parse PEM block containing the public cert")
+		return WinCert{}, fmt.Errorf("Failed to parse PEM block: %s", conf.PublicCertFile)
 	}
 
 	pub, err := x509.ParseCertificate(block.Bytes)

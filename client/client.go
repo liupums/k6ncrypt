@@ -1,4 +1,4 @@
-package main
+package client
 
 import (
 	"crypto/tls"
@@ -10,79 +10,51 @@ import (
 	"contoso.org/utils" //https://github.com/drov0/GolangLocalModulesExample
 )
 
-func main() {
-
-	// pemKey, err := utils.NewPEMCrypto(&utils.PEM{
-	// 	PrivatePEMFile: "rsakey.pem",
-	// 	PublicCertFile: "cert.pem",
-	// })
-	// if err != nil {
-	// 	fmt.Println(err)
-	// 	return
-	// }
-	// cert := pemKey.TLSCertificate()
-
-	// csKey, err := utils.NewWINCS(&utils.WINCS{
-	// 	Issuer: "localhost",
-	// })
+func RunClient(uri string, certFile string, rootFile string) error {
 
 	csKey, err := utils.NewWinCert(&utils.WinCert{
-		PublicCertFile: "cert.pem",
+		PublicCertFile: certFile,
 	})
 
 	if err != nil {
 		log.Println(err)
-		return
+		return err
 	}
 	cert := csKey.TLSCertificate()
 
-	// Read the key pair to create certificate
-	// cert, err := tls.LoadX509KeyPair("cert.pem", "key.pem")
-	// if err != nil {
-	// 	log.Fatal(err)
-	// }
-
-	// Create a CA certificate pool and add cert.pem to it
-	caCert, err := ioutil.ReadFile("cert.pem")
+	rootCert, err := ioutil.ReadFile(rootFile)
 	if err != nil {
 		log.Fatal(err)
 	}
-
-	caCertPool := x509.NewCertPool()
-	caCertPool.AppendCertsFromPEM(caCert)
+	rootCertPool := x509.NewCertPool()
+	rootCertPool.AppendCertsFromPEM(rootCert)
 
 	// Create a HTTPS client and supply the created CA pool and certificate
 	client := &http.Client{
 		Transport: &http.Transport{
 			TLSClientConfig: &tls.Config{
-				RootCAs:      caCertPool,
+				RootCAs:      rootCertPool,
 				Certificates: []tls.Certificate{cert},
 				// Set InsecureSkipVerify to skip the default validation we are
 				// replacing. This will not disable VerifyConnection.
 				InsecureSkipVerify: true,
 				VerifyConnection: func(cs tls.ConnectionState) error {
 					log.Printf("VerifyConnection server %s\n", cs.ServerName)
-					opts := x509.VerifyOptions{
-						DNSName:       cs.ServerName,
-						Intermediates: x509.NewCertPool(),
-					}
 					for i, cert := range cs.PeerCertificates[0:] {
 						cn := cert.Subject.CommonName
 						log.Printf("server cert[%d], CN='%s'\n", i, cn)
 					}
 
-					opts.Roots = caCertPool
-					_, err := cs.PeerCertificates[0].Verify(opts)
-					return err
+					return nil
 				},
 			},
 		},
 	}
 
-	// Request /hello via the created HTTPS client over port 8443 via GET
-	r, err := client.Get("https://localhost:8443/hello")
+	r, err := client.Get(uri)
 	if err != nil {
 		log.Fatal(err)
+		return err
 	}
 
 	// Read the response body
@@ -94,4 +66,5 @@ func main() {
 
 	// Print the response body to stdout
 	log.Printf("%s\n", body)
+	return nil
 }

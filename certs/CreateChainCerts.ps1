@@ -47,14 +47,13 @@ function createLeafCert([object]$signingCert, [string]$CN)
     $selfSignedArgs += @{"-Signer"=$signingCert }
 
     $basicConstrains = new-object System.Security.Cryptography.X509Certificates.X509BasicConstraintsExtension $false,$false,0,$true
-    $caPem =  @(
-            '-----BEGIN CERTIFICATE-----'
-            [System.Convert]::ToBase64String($signingCert.RawData, 'InsertLineBreaks')
-            '-----END CERTIFICATE-----'
-        )
+    $caPem=new-object System.Text.StringBuilder
+    [void]$caPem.AppendLine("-----BEGIN CERTIFICATE-----")
+    [void]$caPem.AppendLine([System.Convert]::ToBase64String($signingCert.RawData,'InsertLineBreaks'))
+    [void]$caPem.AppendLine("-----END CERTIFICATE-----")
 
     # Add Embedded Ca Cert 1.2.840.113556.1.8000.2554.197254.100
-    $caPemStr = $caPem -join ""
+    $caPemStr = $caPem.ToString()
     $caPemBytes = [system.Text.Encoding]::ASCII.GetBytes($caPemStr)
     $embeddedCA = new-object System.Security.Cryptography.X509Certificates.X509Extension "1.2.840.113556.1.8000.2554.197254.100",$caPemBytes,$false
     $selfSignedArgs += @{"-Extension"=@($basicConstrains, $embeddedCA) }
@@ -159,7 +158,9 @@ function MyCreate()
 
   Export-Certificate -Cert $rootCert -FilePath "$path\$FAKEROOT.cer"  | Out-Null
   Export-Certificate -Cert $caCert -FilePath "$path\$FAKECA.cer"  | Out-Null
-  
+  Export-Certificate -Cert $clientLeafCert -FilePath "$path\test.cer"  | Out-Null
+  CERTUTIL.EXE -encode "$path\test.cer" "$path\test.pem"
+
   Write-host "Remove fake ROOT cert from cert store."  
   RemoveCertFromStore($rootCert.ThumbPrint)
 
