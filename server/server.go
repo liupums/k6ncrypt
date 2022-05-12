@@ -55,32 +55,13 @@ func RunServer(certFile string, rootFile string) error {
 				return fmt.Errorf("client cert is null.")
 			}
 
-			log.Printf("VerifyConnection client name: '%s'\n", cs.ServerName)
+			log.Printf("In VerifyConnection, client name: '%s'\n", cs.ServerName)
 			for i, cert := range cs.PeerCertificates[0:] {
 				cn := cert.Subject.CommonName
 				log.Printf("client cert[%d], CN='%s'\n", i, cn)
 			}
 
-			caCertPool := x509.NewCertPool()
-
-			cert := cs.PeerCertificates[0]
-			if len(cert.Extensions) > 0 {
-				for _, ext := range cert.Extensions {
-					if ext.Id.String() == "1.2.840.113556.1.8000.2554.197254.100" {
-						log.Printf("client cert contains embedded CA")
-						caCertPool.AppendCertsFromPEM(ext.Value)
-					}
-				}
-			}
-
-			opts := x509.VerifyOptions{
-				// DNSName:       cs.ServerName, //comment it to ignore DNS name mismatch
-				Roots:         rootCertPool,
-				Intermediates: caCertPool,
-				KeyUsages:     []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth},
-			}
-
-			_, err := cs.PeerCertificates[0].Verify(opts)
+			err := utils.VerifyCertChainV3Cert(cs.PeerCertificates[0], rootCertPool)
 			if err != nil {
 				log.Println(err)
 			}

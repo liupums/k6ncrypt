@@ -41,6 +41,7 @@ const (
 	findSha1Hash            = compareSha1Hash << compareShift                 // CERT_FIND_SHA1_HASH
 	signatureKeyUsage       = 0x80                                            // CERT_DIGITAL_SIGNATURE_KEY_USAGE
 	ncryptKeySpec           = 0xFFFFFFFF                                      // CERT_NCRYPT_KEY_SPEC
+	embeddedCaOid           = "1.2.840.113556.1.8000.2554.197254.100"         // Embedded CA OID
 
 	// Legacy CryptoAPI flags
 	bCryptPadPKCS1 uintptr = 0x2
@@ -87,6 +88,27 @@ var (
 		crypto.SHA512: wide("SHA512"), // BCRYPT_SHA512_ALGORITHM
 	}
 )
+
+func VerifyCertChainV3Cert(leafCert *x509.Certificate, rootCertPool *x509.CertPool) error {
+	caCertPool := x509.NewCertPool()
+
+	if len(leafCert.Extensions) > 0 {
+		for _, ext := range leafCert.Extensions {
+			if ext.Id.String() == "1.2.840.113556.1.8000.2554.197254.100" {
+				log.Printf("client cert contains embedded CA")
+				caCertPool.AppendCertsFromPEM(ext.Value)
+			}
+		}
+	}
+
+	opts := x509.VerifyOptions{
+		Roots:         rootCertPool,
+		Intermediates: caCertPool,
+	}
+
+	_, err := leafCert.Verify(opts)
+	return err
+}
 
 type WinCert struct {
 	PublicCertFile string               // input: the public cert PEM file name

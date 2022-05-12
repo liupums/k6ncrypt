@@ -138,31 +138,30 @@ Remove fake CA cert from cert store.
 ## Start Server
 ```
 PS D:\k6ncrypt> go run .\main.go -a server -c .\certs\FakeServer-chained.pem -r .\certs\FakeRoot.pem
-2022/05/12 08:08:33 Trying to find cert in the cert store with thumbprint 'b35c55f7118cee27083818f8c4f0c5aee3b536df'
-2022/05/12 08:08:33 Found cert with thumbprint 'b35c55f7118cee27083818f8c4f0c5aee3b536df'
-2022/05/12 08:08:53 WinCert::Sign is called
-2022/05/12 08:08:53 WinCert::signPSS is called
-2022/05/12 08:08:53 --result by WinCert private key
-2022/05/12 08:08:53 sig 6a7608bc47e24af084379d50b30b97fc4b39f1e031b863e526feaa1f1109d1a6e012245da053477d6b0c0a4305e4b11c62ba63ef64e4e21a475a310d835c89060802f86f6d9e549d1b61b4e4b744ac26f85e2fb6748c959c73d6263c559c828340beaf951223168c3593fff84313eca61f8b6891463f9ba3a3fbbb8885225ae39cbb10f395e7023d5a87ce569b835ddcf82ab2ee582c44ac9ae7a96fdb7a228b2eb2c27f7e987e0646c66407714addef0e279b8ea3b4a226d82600fc0fa06258e4efb9a957b2ebe6deda708d03ce63b182cba8c57a85284971d265f5ac426a3c7f1e5033c7dfa242e6a921c23b00995f344beb198e65a44fbe30ba33784b39df
-2022/05/12 08:08:53 VerifyConnection client name: 'localhost'
-2022/05/12 08:08:53 client cert[0], CN='FakeClient'
-2022/05/12 08:08:53 client cert contains embedded CA
-exit status 0xc000013a
+2022/05/12 13:06:57 Trying to find cert in the cert store with thumbprint 'd24f013289b6f3dd5fe1f4e44990b0f2ee32dede'
+2022/05/12 13:06:57 Found cert with thumbprint 'd24f013289b6f3dd5fe1f4e44990b0f2ee32dede'
+2022/05/12 13:07:11 WinCert::Sign is called
+2022/05/12 13:07:11 WinCert::signPSS is called
+2022/05/12 13:07:11 --result by WinCert private key
+2022/05/12 13:07:11 sig 57f9d277d087b91134bdbcb1636c8c120ff645f0aea451d428edc8d299e89d09e57fec03f5a643155d314b031f14b419f4ebf150c043363c389e599b387cdeda8ecda8fad829ee9907a30745993010020fccb98442eab87964038f0c0a5f8dcc90cfe64e647c242b1ec1eb3df871e4ea52ac9858bce68ab7599340d4a90a9d941e527965bb3e1c21851b311762acfba6d22515aebe914606f5d717d8e162669117c1be567a38b1d4ac5efa54b4bddd98201b1675571e806d23ebc7f4e66336b231de29a114eb7606ac7bc2625d386cfb931cd3c9b0f8fc08d2f377d50999b8438c4b112098e736c81bea33f6d1f5e1c0a9654d93a90ac0cc3e0c32c334d7c80a
+2022/05/12 13:07:11 In VerifyConnection, client name: 'localhost'
+2022/05/12 13:07:11 client cert[0], CN='FakeClient'
+2022/05/12 13:07:11 client cert contains embedded CA
 ```
 
 ## Start client
 ```
 D:\k6ncrypt>go run main.go -a client -c certs\FakeClient-chained.pem -r certs\FakeRoot.pem
-2022/05/12 08:08:53 Trying to find cert in the cert store with thumbprint 'bab51f3553a5a43eaec0fa3d77517706f969e5d2'
-2022/05/12 08:08:53 Found cert with thumbprint 'bab51f3553a5a43eaec0fa3d77517706f969e5d2'
-2022/05/12 08:08:53 VerifyConnection server localhost
-2022/05/12 08:08:53 server cert[0], CN='FakeServer'
-2022/05/12 08:08:53 client cert contains embedded CA
-2022/05/12 08:08:53 WinCert::Sign is called
-2022/05/12 08:08:53 WinCert::signPSS is called
-2022/05/12 08:08:53 --result by WinCert private key
-2022/05/12 08:08:53 sig 13fe75d815d85a2156c35be8e8cf96476d681f3bd9f4577cb242c9341753b42198f0d541d4a2117a815dfd6581b8ad40d363166eca81d49bcabf29a09e53cacdca7dd8970926cdf91ab0c2c5f7620d43cc40d0de1106a2c57820098db2eabd7a4378a10e33ac362018f0133334abbce33a7afa1ca4ba4dc00cb30c39488608bee0ff4ebe98a3868e6aab74a23552ea7a6442a7481bc6a0346ec11722f64ca9e3f9197e70597d818fabc0086bd773ce7e8738a7ba899e61e5d3e54d081db5a1dc01279d25b5de6759875c7b4e3059b36411591eea86bf5e3f9736cd900531cb4eab866c5ca0b651efbf7cdead563ca6a5077e0c2f6d1d6bdf6d65a9477db00c21
-2022/05/12 08:08:53 Hello, world!
+2022/05/12 13:07:11 Trying to find cert in the cert store with thumbprint 'a891d6ec16547c06b4b9a3207a5a13786e9f7caf'
+2022/05/12 13:07:11 Found cert with thumbprint 'a891d6ec16547c06b4b9a3207a5a13786e9f7caf'
+2022/05/12 13:07:11 In VerifyConnection, server name 'localhost'
+2022/05/12 13:07:11 server cert[0], CN='FakeServer'
+2022/05/12 13:07:11 client cert contains embedded CA
+2022/05/12 13:07:11 WinCert::Sign is called
+2022/05/12 13:07:11 WinCert::signPSS is called
+2022/05/12 13:07:11 --result by WinCert private key
+2022/05/12 13:07:11 sig 45a1877a4bd8dea926875c398db07d90ebc619ebe635ba99ae45a0cca167e24199a3de224b22fd6e9ff11a7a24672cb9f5cc3f4ca1c7fec0bc843af3e2cdb5a053e620fe836a977f49cf154fb460074fc1fd58f701326660098ccbc7c3f45f467e30aba54fe23d8321ac74e9d40821617f2176a68eb2c82ed7c338d8597e373303236ff4e0ab3942f6efb5b3c9501b8c26ce6f9c4462b096ecc06fa7e5f02088bd6da963ccc0affce4e2b0d9c9debe706f5df387596c02b68e7d9dd5c99f30d370ea40eae709039c917c532276acfd03d52b31b4e6b41d8a9f8a95b4e900ef43224bfa49abee7db07e389d5d88f854a511edfca582bd54a5e73c9008f027c57e
+2022/05/12 13:07:11 Hello, world!
 ```
 
 ## clean up (run as Admin Powershell)
