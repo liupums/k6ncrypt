@@ -125,24 +125,56 @@ go: added golang.org/x/crypto v0.0.0-20210220033148-5ea612d1eb83
 go: added golang.org/x/sys v0.0.0-20210223212115-eede4237b368
 ```
 
+## Create testing certs (run as Admin Powershell)
+```
+PS D:\k6ncrypt\certs> .\CreateChainCerts.ps1 -action create
+Save client leaf cert PEM to file system
+Save server leaf cert PEM to file system
+Save root PEM to file system
+Save CA PEM to file system
+Remove fake ROOT cert from cert store.
+Remove fake CA cert from cert store.
+```
 ## Start Server
 ```
-D:\k6ncrypt>go run server.go
-VerifyConnection client localhost
-cert[0], CN='localhost'
+PS D:\k6ncrypt> go run .\main.go -a server -c .\certs\FakeServer-chained.pem -r .\certs\FakeRoot.pem
+2022/05/12 08:08:33 Trying to find cert in the cert store with thumbprint 'b35c55f7118cee27083818f8c4f0c5aee3b536df'
+2022/05/12 08:08:33 Found cert with thumbprint 'b35c55f7118cee27083818f8c4f0c5aee3b536df'
+2022/05/12 08:08:53 WinCert::Sign is called
+2022/05/12 08:08:53 WinCert::signPSS is called
+2022/05/12 08:08:53 --result by WinCert private key
+2022/05/12 08:08:53 sig 6a7608bc47e24af084379d50b30b97fc4b39f1e031b863e526feaa1f1109d1a6e012245da053477d6b0c0a4305e4b11c62ba63ef64e4e21a475a310d835c89060802f86f6d9e549d1b61b4e4b744ac26f85e2fb6748c959c73d6263c559c828340beaf951223168c3593fff84313eca61f8b6891463f9ba3a3fbbb8885225ae39cbb10f395e7023d5a87ce569b835ddcf82ab2ee582c44ac9ae7a96fdb7a228b2eb2c27f7e987e0646c66407714addef0e279b8ea3b4a226d82600fc0fa06258e4efb9a957b2ebe6deda708d03ce63b182cba8c57a85284971d265f5ac426a3c7f1e5033c7dfa242e6a921c23b00995f344beb198e65a44fbe30ba33784b39df
+2022/05/12 08:08:53 VerifyConnection client name: 'localhost'
+2022/05/12 08:08:53 client cert[0], CN='FakeClient'
+2022/05/12 08:08:53 client cert contains embedded CA
+exit status 0xc000013a
 ```
 
 ## Start client
 ```
-D:\k6ncrypt>go run client.go
-VerifyConnection server localhost
-cert[0], CN='localhost'
-WinCert::Sign is called
-WinCert::SignPSS is called
---result by WinCert private key
-sig 5276f1a25cfbb0baee389c7f4217da89b23760674e12e64ba55658e97f82ce7dda4f720d6d79690c267ef04b5f71e2eb9b042afe443a5e618f216267071800f1810c1056696a0cc15c5872096c49027b6e3290c5f72ae685338dfdd34ec766163f75961c70435b6248f37a1e31db80361aed81e9ae421b5b6ca8a7060448436a703fe9394900685d8f8d4e1eb03c5b86c449f75f1b66e435fd0a0bb2b97e940c7ab6248ea78baf909a8036e8dd591a0fbbbce974bed7855add1a64169072356de59891aab7faabfe664609c721b1e65135d7da82f3dc5bf6c189ab241a50c8ca680a46d9423e5dcfd44622793df048ad9d8274c7a3d644c4b3a18de728f33a6c
------
-Hello, world!
+D:\k6ncrypt>go run main.go -a client -c certs\FakeClient-chained.pem -r certs\FakeRoot.pem
+2022/05/12 08:08:53 Trying to find cert in the cert store with thumbprint 'bab51f3553a5a43eaec0fa3d77517706f969e5d2'
+2022/05/12 08:08:53 Found cert with thumbprint 'bab51f3553a5a43eaec0fa3d77517706f969e5d2'
+2022/05/12 08:08:53 VerifyConnection server localhost
+2022/05/12 08:08:53 server cert[0], CN='FakeServer'
+2022/05/12 08:08:53 client cert contains embedded CA
+2022/05/12 08:08:53 WinCert::Sign is called
+2022/05/12 08:08:53 WinCert::signPSS is called
+2022/05/12 08:08:53 --result by WinCert private key
+2022/05/12 08:08:53 sig 13fe75d815d85a2156c35be8e8cf96476d681f3bd9f4577cb242c9341753b42198f0d541d4a2117a815dfd6581b8ad40d363166eca81d49bcabf29a09e53cacdca7dd8970926cdf91ab0c2c5f7620d43cc40d0de1106a2c57820098db2eabd7a4378a10e33ac362018f0133334abbce33a7afa1ca4ba4dc00cb30c39488608bee0ff4ebe98a3868e6aab74a23552ea7a6442a7481bc6a0346ec11722f64ca9e3f9197e70597d818fabc0086bd773ce7e8738a7ba899e61e5d3e54d081db5a1dc01279d25b5de6759875c7b4e3059b36411591eea86bf5e3f9736cd900531cb4eab866c5ca0b651efbf7cdead563ca6a5077e0c2f6d1d6bdf6d65a9477db00c21
+2022/05/12 08:08:53 Hello, world!
+```
+
+## clean up (run as Admin Powershell)
+```
+PS D:\k6ncrypt\certs> .\CreateChainCerts.ps1 -action clean
+Remove leaf server and client cert from cert store.
+Remove fake ROOT pem from file system.
+Remove fake CA pem from file system.
+Remove fake server pem from file system.
+Remove fake server chained PEM from file system.
+Remove fake client pem from file system.
+Remove fake client chained PEM from file system.
 ```
 ### check the key is non-exportable
 NOTE: use the key container id showing above 55340bce64ed0049e84ce494a19e1479_0348503b-0232-43a2-a77a-dc83cf95a8c1

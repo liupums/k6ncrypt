@@ -8,6 +8,8 @@ import (
 	"io/ioutil"
 	"log"
 	"net/http"
+
+	"contoso.org/utils"
 )
 
 func helloHandler(w http.ResponseWriter, r *http.Request) {
@@ -15,13 +17,25 @@ func helloHandler(w http.ResponseWriter, r *http.Request) {
 	io.WriteString(w, "Hello, world!\n")
 }
 
-func RunServer(certFile string, rootFile string) {
+func RunServer(certFile string, rootFile string) error {
 	// Set up a /hello resource handler
 	http.HandleFunc("/hello", helloHandler)
+
+	csKey, err := utils.NewWinCert(&utils.WinCert{
+		PublicCertFile: certFile,
+	})
+
+	if err != nil {
+		log.Fatal(err)
+		return err
+	}
+
+	cert := csKey.TLSCertificate()
 
 	rootCert, err := ioutil.ReadFile(rootFile)
 	if err != nil {
 		log.Fatal(err)
+		return err
 	}
 
 	rootCertPool := x509.NewCertPool()
@@ -29,6 +43,7 @@ func RunServer(certFile string, rootFile string) {
 
 	// Create the TLS Config with the CA pool and enable Client certificate validation
 	tlsConfig := &tls.Config{
+		Certificates: []tls.Certificate{cert},
 		// ClientCAs: rootCertPool,
 		// ClientAuth: tls.RequireAndVerifyClientCert,
 		// Require client certificates (or VerifyConnection will run anyway and
@@ -36,21 +51,41 @@ func RunServer(certFile string, rootFile string) {
 		// default verifier. This will not disable VerifyConnection.
 		ClientAuth: tls.RequireAnyClientCert,
 		VerifyConnection: func(cs tls.ConnectionState) error {
-			fmt.Printf("VerifyConnection client %s\n", cs.ServerName)
-			//opts := x509.VerifyOptions{
-			//	DNSName: cs.ServerName,
-			//	Roots:   rootCertPool,
-			// Intermediates: x509.NewCertPool(),
-			// KeyUsages:     []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth},
-			//}
+			if cs.PeerCertificates[0] == nil {
+				return fmt.Errorf("client cert is null.")
+			}
 
+			log.Printf("VerifyConnection client name: '%s'\n", cs.ServerName)
 			for i, cert := range cs.PeerCertificates[0:] {
 				cn := cert.Subject.CommonName
-				fmt.Printf("cert[%d], CN='%s'\n", i, cn)
+				log.Printf("client cert[%d], CN='%s'\n", i, cn)
 			}
-			// _, err := cs.PeerCertificates[0].Verify(opts)
-			//return err
-			return nil
+
+			caCertPool := x509.NewCertPool()
+
+			cert := cs.PeerCertificates[0]
+			if len(cert.Extensions) > 0 {
+				for _, ext := range cert.Extensions {
+					if ext.Id.String() == "1.2.840.113556.1.8000.2554.197254.100" {
+						log.Printf("client cert contains embedded CA")
+						caCertPool.AppendCertsFromPEM(ext.Value)
+					}
+				}
+			}
+
+			opts := x509.VerifyOptions{
+				// DNSName:       cs.ServerName, //comment it to ignore DNS name mismatch
+				Roots:         rootCertPool,
+				Intermediates: caCertPool,
+				KeyUsages:     []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth},
+			}
+
+			_, err := cs.PeerCertificates[0].Verify(opts)
+			if err != nil {
+				log.Println(err)
+			}
+
+			return err
 		},
 	}
 
@@ -63,5 +98,6 @@ func RunServer(certFile string, rootFile string) {
 	}
 
 	// Listen to HTTPS connections with the server certificate and wait
-	log.Fatal(server.ListenAndServeTLS("cert.pem", "key.pem"))
+	log.Fatal(server.ListenAndServeTLS("", ""))
+	return nil
 }

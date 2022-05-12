@@ -118,54 +118,34 @@ function MyCreate()
   $servLeafCert = createLeafCert -signingCert $caCert -CN $FAKESERVER
   $clientLeafCert = createLeafCert -signingCert $caCert -CN $FAKECLIENT
 
-  Write-host "Save client leaf chained PEM to file system: client leaf, ca, root"  
-  $cPem=new-object System.Text.StringBuilder
-  [void]$cPem.AppendLine("-----BEGIN CERTIFICATE-----")
-  [void]$cPem.AppendLine([System.Convert]::ToBase64String($clientLeafCert.RawData,'InsertLineBreaks'))
-  [void]$cPem.AppendLine("-----END CERTIFICATE-----")
-  [void]$cPem.AppendLine("-----BEGIN CERTIFICATE-----")
-  [void]$cPem.AppendLine([System.Convert]::ToBase64String($caCert.RawData,'InsertLineBreaks'))
-  [void]$cPem.AppendLine("-----END CERTIFICATE-----")
-  [void]$cPem.AppendLine("-----BEGIN CERTIFICATE-----")
-  [void]$cPem.AppendLine([System.Convert]::ToBase64String($rootCert.RawData,'InsertLineBreaks'))
-  [void]$cPem.AppendLine("-----END CERTIFICATE-----")
-  $cPem.ToString() | out-file "$path\$FAKECLIENT.pem"
-  $clientLeafCertThumbprint = $clientLeafCert.ThumbPrint
-  "engine:e_ncrypt:machine:my:$clientLeafCertThumbprint" | out-file "$path\$FAKECLIENT.keyid"
+  Write-host "Save client leaf cert PEM to file system"  
+  Export-Certificate -Cert $clientLeafCert -FilePath "$path\$FAKECLIENT.cer"  | Out-Null
+  CERTUTIL.EXE -encode "$path\$FAKECLIENT.cer" "$path\$FAKECLIENT.pem" | Out-Null
+  [System.IO.File]::Delete("$path\$FAKECLIENT.cer")
 
-
-  Write-host "Save server leaf chained PEM to file system: client leaf, ca, root"  
-  $sPem=new-object System.Text.StringBuilder
-  [void]$sPem.AppendLine("-----BEGIN CERTIFICATE-----")
-  [void]$sPem.AppendLine([System.Convert]::ToBase64String($servLeafCert.RawData,'InsertLineBreaks'))
-  [void]$sPem.AppendLine("-----END CERTIFICATE-----")
-  [void]$sPem.AppendLine("-----BEGIN CERTIFICATE-----")
-  [void]$sPem.AppendLine([System.Convert]::ToBase64String($caCert.RawData,'InsertLineBreaks'))
-  [void]$sPem.AppendLine("-----END CERTIFICATE-----")
-  [void]$sPem.AppendLine("-----BEGIN CERTIFICATE-----")
-  [void]$sPem.AppendLine([System.Convert]::ToBase64String($rootCert.RawData,'InsertLineBreaks'))
-  [void]$sPem.AppendLine("-----END CERTIFICATE-----")
-  $sPem.ToString() | out-file "$path\$FAKESERVER.pem"
-  $serverLeafCertThumbprint = $servLeafCert.ThumbPrint
-  "engine:e_ncrypt:machine:my:$serverLeafCertThumbprint" | out-file "$path\$FAKESERVER.keyid"
-
+  Write-host "Save server leaf cert PEM to file system"  
+  Export-Certificate -Cert $servLeafCert -FilePath "$path\$FAKESERVER.cer"  | Out-Null
+  CERTUTIL.EXE -encode "$path\$FAKESERVER.cer" "$path\$FAKESERVER.pem" | Out-Null
+  [System.IO.File]::Delete("$path\$FAKESERVER.cer")
+  
   Write-host "Save root PEM to file system"  
-  $rPem=new-object System.Text.StringBuilder
-  [void]$rPem.AppendLine("-----BEGIN CERTIFICATE-----")
-  [void]$rPem.AppendLine([System.Convert]::ToBase64String($rootCert.RawData,'InsertLineBreaks'))
-  [void]$rPem.AppendLine("-----END CERTIFICATE-----")
-  $rPem.ToString() | out-file "$path\$FAKEROOT.pem"
-
   Export-Certificate -Cert $rootCert -FilePath "$path\$FAKEROOT.cer"  | Out-Null
+  CERTUTIL.EXE -encode "$path\$FAKEROOT.cer" "$path\$FAKEROOT.pem" | Out-Null
+
+  Write-host "Save CA PEM to file system"  
   Export-Certificate -Cert $caCert -FilePath "$path\$FAKECA.cer"  | Out-Null
-  Export-Certificate -Cert $clientLeafCert -FilePath "$path\test.cer"  | Out-Null
-  CERTUTIL.EXE -encode "$path\test.cer" "$path\test.pem"
+  CERTUTIL.EXE -encode "$path\$FAKECA.cer" "$path\$FAKECA.pem" | Out-Null
+
+  Get-Content "$path\$FAKECLIENT.pem", "$path\$FAKECA.pem", "$path\$FAKEROOT.pem" | Set-Content "$path\$FAKECLIENT-chained.pem"
+  Get-Content "$path\$FAKESERVER.pem", "$path\$FAKECA.pem", "$path\$FAKEROOT.pem" | Set-Content "$path\$FAKESERVER-chained.pem"
 
   Write-host "Remove fake ROOT cert from cert store."  
   RemoveCertFromStore($rootCert.ThumbPrint)
+  [System.IO.File]::Delete("$path\$FAKEROOT.cer")
 
   Write-host "Remove fake CA cert from cert store."  
   RemoveCertFromStore($caCert.ThumbPrint)
+  [System.IO.File]::Delete("$path\$FAKECA.cer")
 }
 
 # Clean up cert store created by MyCreate() and restore to previous state
@@ -174,26 +154,16 @@ function MyCleanUp()
   Write-host "Remove leaf server and client cert from cert store."  
   Get-Childitem -path cert:\  -Recurse | Where-Object { $_.issuer -like "CN=$FAKECA" }  | remove-item -ErrorAction SilentlyContinue | Out-Null
 
-  if ([System.IO.File]::Exists("$path\$FAKEROOT.cer"))
-  {
-     Write-host "Remove fake ROOT cert from cert store."  
-     RemoveCertFromStore(GetThumbPrint("$path\$FAKEROOT.cer"))
-     Write-host "Remove fake ROOT cert from file system."  
-     [System.IO.File]::Delete("$path\$FAKEROOT.cer")
-  }
-
-  if ([System.IO.File]::Exists("$path\$FAKECA.cer"))
-  {
-     Write-host "Remove fake CA cert from cert store."  
-     RemoveCertFromStore(GetThumbPrint("$path\$FAKECA.cer"))
-     Write-host "Remove fake CA cert from file system."  
-     [System.IO.File]::Delete("$path\$FAKECA.cer")
-  }
-
   if ([System.IO.File]::Exists("$path\$FAKEROOT.pem"))
   {
      Write-host "Remove fake ROOT pem from file system."  
      [System.IO.File]::Delete("$path\$FAKEROOT.pem")
+  }
+
+  if ([System.IO.File]::Exists("$path\$FAKECA.pem"))
+  {
+     Write-host "Remove fake CA pem from file system."  
+     [System.IO.File]::Delete("$path\$FAKECA.pem")
   }
 
   if ([System.IO.File]::Exists("$path\$FAKESERVER.pem"))
@@ -202,10 +172,10 @@ function MyCleanUp()
      [System.IO.File]::Delete("$path\$FAKESERVER.pem")
   }
 
-  if ([System.IO.File]::Exists("$path\$FAKESERVER.keyid"))
+  if ([System.IO.File]::Exists("$path\$FAKESERVER-chained.pem"))
   {
-     Write-host "Remove fake server keyid from file system."  
-     [System.IO.File]::Delete("$path\$FAKESERVER.keyid")
+     Write-host "Remove fake server chained PEM from file system."  
+     [System.IO.File]::Delete("$path\$FAKESERVER-chained.pem")
   }
 
   if ([System.IO.File]::Exists("$path\$FAKECLIENT.pem"))
@@ -214,10 +184,10 @@ function MyCleanUp()
      [System.IO.File]::Delete("$path\$FAKECLIENT.pem")
   }
 
-  if ([System.IO.File]::Exists("$path\$FAKECLIENT.keyid"))
+  if ([System.IO.File]::Exists("$path\$FAKECLIENT-chained.pem"))
   {
-     Write-host "Remove fake client keyid from file system."  
-     [System.IO.File]::Delete("$path\$FAKECLIENT.keyid")
+     Write-host "Remove fake client chained PEM from file system."  
+     [System.IO.File]::Delete("$path\$FAKECLIENT-chained.pem")
   }
 }
 
